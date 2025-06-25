@@ -9,14 +9,6 @@ echo "📁 Ensuring qBittorrent config directory is ready..."
 mkdir -p /config/qbittorrent
 chown -R "$PUID:$PGID" /config/qbittorrent
 
-# Wait until config file is created by qBittorrent
-until [ -f /config/qbittorrent/qBittorrent/qBittorrent.conf ]; do
-  echo "⏳ Waiting for qBittorrent config to be created..."
-  sleep 2
-done
-
-echo "✅ qBittorrent config file found."
-
 SONARR_URL="http://sonarr:8989"
 RADARR_URL="http://radarr:7878"
 PROWLARR_URL="http://prowlarr:9696"
