@@ -184,7 +184,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "RadarrSettings",
     "fields": [
-      {"name":"baseUrl","value":""},
+      {"name":"baseUrl","value":"http://radarr:8989"},
       {"name":"apiKey","value":"'"$RADARR_API_KEY"'"},
       {"name":"url","value":"'"$RADARR_URL"'"}
     ]
