@@ -1,85 +1,143 @@
 #!/bin/bash
 set -e
 
-echo "🔧 Starting autoconfig..."
-source "/.env"
+ENV_FILE="./.env"
+source "$ENV_FILE"
 
-# Helper: wait until service is ready
-await() { local url=$1 name=$2; echo "⏳ Waiting for $name ($url)..."; until curl -s --fail "$url" >/dev/null; do sleep 3; done; echo "✅ $name is up!"; }
-
-SONARR="http://sonarr:8989"
-RADARR="http://radarr:7878"
-PROWLARR="http://prowlarr:9696"
-QB="http://qbittorrent:8080"
-await "$SONARR" Sonarr
-await "$RADARR" Radarr
-await "$PROWLARR" Prowlarr
-await "$QB" qBittorrent
-
-echo
-QBT_USER="${QBT_USER:-admin}"
-QBT_PASS="${QBT_PASS:-adminadmin}"
-
-# Manage download client: delete existing then create new
-manage_client() {
-  local base=$1 api_key=$2 name=$3 category=$4
-  local url="$base/api/v3/downloadclient"
-  echo "📡 Ensuring $name client (delete old then create new)..."
-  local id=$(curl -s -H "X-Api-Key: $api_key" "$url" | jq -r ".[] | select(.name==\"$name\") | .id")
-  if [[ -n "$id" && "$id" != "null" ]]; then
-    curl -s -X DELETE "$url/$id" -H "X-Api-Key: $api_key"
-    echo "🗑 Deleted existing client (ID=$id)."
-  fi
-  # Create new
-  curl -s -X POST "$url" -H "X-Api-Key: $api_key" -H "Content-Type: application/json" -d '{
-    "enable": true,
-    "name": "'"$name"'",
-    "protocol": "torrent",
-    "implementation": "qBittorrent",
-    "configContract": "qBittorrentSettings",
-    "fields": [
-      {"name":"host","value":"qbittorrent"},
-      {"name":"port","value":8080},
-      {"name":"username","value":"'"$QBT_USER"'"},
-      {"name":"password","value":"'"$QBT_PASS"'"},
-      {"name":"category","value":"'"$category"'"},
-      {"name":"priority","value":1}
-    ]
-  }'
-  echo "✅ Created $name client with priority=1."
+wait_for() {
+  local url=$1
+  local name=$2
+  echo "⏳ Waiting for $name at $url..."
+  until curl -s --fail "$url" >/dev/null; do
+    sleep 3
+  done
+  echo "✅ $name is up!"
 }
 
-# Manage Prowlarr app link: delete existing then create
-manage_app() {
-  local api_key=$1 app=$2 impl=$3 urlval=$4
-  local endpoint="${PROWLARR}/api/v1/applications"
-  echo "🔗 Ensuring Prowlarr link for $app..."
-  local id=$(curl -s -H "X-Api-Key: $api_key" "$endpoint" | jq -r ".[] | select(.name==\"$app\") | .id")
-  if [[ -n "$id" && "$id" != "null" ]]; then
-    curl -s -X DELETE "$endpoint/$id" -H "X-Api-Key: $api_key"
-    echo "🗑 Deleted existing Prowlarr link (ID=$id)."
-  fi
-  curl -s -X POST "$endpoint" -H "X-Api-Key: $api_key" -H "Content-Type: application/json" -d '{
-    "name": "'"$app"'",
-    "implementation": "'"$impl"'",
-    "enableRss": true,
-    "enableAutomaticSearch": true,
-    "enableInteractiveSearch": true,
-    "syncLevel": 3,
-    "configContract": "'"$impl"'Settings",
-    "fields": [
-      {"name":"baseUrl","value":""},
-      {"name":"apiKey","value":"'"${!api_key}"'"},
-      {"name":"url","value":"'"$urlval"'"}
+SONARR_URL="http://sonarr:8989"
+RADARR_URL="http://radarr:7878"
+PROWLARR_URL="http://prowlarr:9696"
+QBT_URL="http://qbittorrent:8080"
+
+wait_for "$SONARR_URL" "Sonarr"
+wait_for "$RADARR_URL" "Radarr"
+wait_for "$PROWLARR_URL" "Prowlarr"
+wait_for "$QBT_URL" "qBittorrent"
+
+# Automatically get API keys if not set
+if [ -z "$SONARR_API_KEY" ]; then
+  SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
+  echo "🔑 SONARR_API_KEY: $SONARR_API_KEY"
+fi
+
+if [ -z "$RADARR_API_KEY" ]; then
+  RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
+  echo "🔑 RADARR_API_KEY: $RADARR_API_KEY"
+fi
+
+if [ -z "$PROWLARR_API_KEY" ]; then
+  PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
+  echo "🔑 PROWLARR_API_KEY: $PROWLARR_API_KEY"
+fi
+
+# ----------------------
+# qBittorrent Integration
+# ----------------------
+echo "📡 Configuring Sonarr → qBittorrent..."
+curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
+  -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"enable\": true,
+    \"name\": \"qBittorrent\",
+    \"protocol\": \"torrent\",
+    \"implementation\": \"qBittorrent\",
+    \"configContract\": \"qBittorrentSettings\",
+    \"fields\": [
+      { \"name\": \"host\", \"value\": \"qbittorrent\" },
+      { \"name\": \"port\", \"value\": 8080 },
+      { \"name\": \"username\", \"value\": \"$WEBUI_USERNAME\" },
+      { \"name\": \"password\", \"value\": \"$WEBUI_PASSWORD\" },
+      { \"name\": \"category\", \"value\": \"sonarr\" }
     ]
-  }'
-  echo "✅ Linked $app in Prowlarr."
-}
+  }"
 
-# Execute
-manage_client "$SONARR" "$SONARR_API_KEY" "qBittorrent" "sonarr"
-manage_client "$RADARR" "$RADARR_API_KEY" "qBittorrent" "radarr"
-manage_app "${PROWLARR_API_KEY}" "Sonarr" "Sonarr" "$SONARR"
-manage_app "${PROWLARR_API_KEY}" "Radarr" "Radarr" "$RADARR"
+echo "📡 Configuring Radarr → qBittorrent..."
+curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
+  -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"enable\": true,
+    \"name\": \"qBittorrent\",
+    \"protocol\": \"torrent\",
+    \"implementation\": \"qBittorrent\",
+    \"configContract\": \"qBittorrentSettings\",
+    \"fields\": [
+      { \"name\": \"host\", \"value\": \"qbittorrent\" },
+      { \"name\": \"port\", \"value\": 8080 },
+      { \"name\": \"username\", \"value\": \"$WEBUI_USERNAME\" },
+      { \"name\": \"password\", \"value\": \"$WEBUI_PASSWORD\" },
+      { \"name\": \"category\", \"value\": \"radarr\" },
+      { \"name\": \"priority\", \"value\": 1 }
+    ]
+  }"
 
-echo "✅ Autoconfig complete."
+# ----------------------
+# Root folders
+# ----------------------
+echo "📁 Ensuring root folders..."
+curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
+  -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"path\": \"$TV_DIR\"
+  }" || echo "📁 /tv already exists"
+
+curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
+  -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"path\": \"$MOVIES_DIR\"
+  }" || echo "📁 /movies already exists"
+
+# ----------------------
+# Skipping quality profile due to known API issue
+# ----------------------
+echo "🎞 Skipping quality profile for Sonarr due to known API issues."
+
+# ----------------------
+# Prowlarr integrations
+# ----------------------
+echo "🔗 Linking Sonarr to Prowlarr..."
+curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
+  -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"Sonarr\",
+    \"implementation\": \"Sonarr\",
+    \"enableRss\": true,
+    \"enableAutomaticSearch\": true,
+    \"enableInteractiveSearch\": true,
+    \"syncLevel\": 3,
+    \"configContract\": \"SonarrSettings\",
+    \"fields\": [
+      { \"name\": \"baseUrl\", \"value\": \"\" },
+      { \"name\": \"apiKey\", \"value\": \"$SONARR_API_KEY\" },
+      { \"name\": \"url\", \"value\": \"$SONARR_URL\" }
+    ]
+  }" || echo "🔗 Sonarr already linked"
+
+echo "🔗 Linking Radarr to Prowlarr..."
+curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
+  -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
+  -d "{
+    \"name\": \"Radarr\",
+    \"implementation\": \"Radarr\",
+    \"enableRss\": true,
+    \"enableAutomaticSearch\": true,
+    \"enableInteractiveSearch\": true,
+    \"syncLevel\": 3,
+    \"configContract\": \"RadarrSettings\",
+    \"fields\": [
+      { \"name\": \"baseUrl\", \"value\": \"\" },
+      { \"name\": \"apiKey\", \"value\": \"$RADARR_API_KEY\" },
+      { \"name\": \"url\", \"value\": \"$RADARR_URL\" }
+    ]
+  }" || echo "🔗 Radarr already linked"
+
+echo "✅ Autoconfiguration complete!"
