@@ -19,23 +19,18 @@ services:
       - TZ=${TZ}
       - RCLONE_CONFIG=/config/rclone/rclone.conf
     volumes:
-      - ./rclone-config:/config/rclone # now RW so rclone can refresh tokens
-      - ${MEDIA_MOUNT}:${MEDIA_MOUNT}:rshared # shared propagation back to host
+      - ./rclone-config:/config/rclone
+      - ${MEDIA_MOUNT}:${MEDIA_MOUNT}:rshared
       - /mnt/rclone_cache:/mnt/rclone_cache
     entrypoint:
       - /bin/sh
       - -c
       - |
-        # clean stale files so --allow-non-empty will work reliably
-        if [ -d "${MEDIA_MOUNT}" ] && [ "$(ls -A "${MEDIA_MOUNT}")" ]; then
+        if [ -d "${MEDIA_MOUNT}" ] && [ "$(ls -A \"${MEDIA_MOUNT}\")" ]; then
           echo "[rclone] Cleaning stale files in ${MEDIA_MOUNT}"
           rm -rf "${MEDIA_MOUNT}"/*
         fi
-
-        # enable allow-other
         printf 'user_allow_other\n' > /etc/fuse.conf
-
-        # mount remote with strict perms
         exec rclone mount ${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH} "${MEDIA_MOUNT}" \
           --allow-non-empty \
           --allow-other \
@@ -48,7 +43,6 @@ services:
           --gid ${PGID} \
           --dir-perms 0775 \
           --file-perms 0664
-
     healthcheck:
       test: ["CMD-SHELL", "mountpoint -q ${MEDIA_MOUNT}"]
       interval: 10s
@@ -91,7 +85,8 @@ services:
     container_name: sonarr
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -100,7 +95,7 @@ services:
       - 8989:8989
     volumes:
       - ./sonarr/config:/config
-      - ${MEDIA_MOUNT}/TV:/media/tv:rshared # <— allow the FUSE mount to show up here
+      - ${MEDIA_MOUNT}/TV:/media/tv:rslave
       - ${DOWNLOADS_DIR}:/downloads
 
   # 4. Radarr
@@ -109,7 +104,8 @@ services:
     container_name: radarr
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -118,7 +114,7 @@ services:
       - 7878:7878
     volumes:
       - ./radarr/config:/config
-      - ${MEDIA_MOUNT}/Movies:/media/movies:rshared # <— same here
+      - ${MEDIA_MOUNT}/Movies:/media/movies:rslave
       - ${DOWNLOADS_DIR}:/downloads
 
   # 5. Prowlarr
@@ -150,8 +146,8 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
       - WEBUI_PORT=8080
-      - WEBUI_USERNAME=admin
-      - WEBUI_PASSWORD=adminadmin
+      - WEBUI_USERNAME=${WEBUI_USERNAME}
+      - WEBUI_PASSWORD=${WEBUI_PASSWORD}
     ports:
       - 8080:8080
       - 6881:6881
