@@ -3,18 +3,11 @@ set -e
 
 source /.env
 
-# Ensure qBittorrent config folder exists and is owned correctly
-echo "📁 Ensuring qBittorrent config directory is ready..."
-
-mkdir -p /config/qbittorrent
-chown -R "$PUID:$PGID" /config/qbittorrent
-
+# Service URLs
 SONARR_URL="http://sonarr:8989"
 RADARR_URL="http://radarr:7878"
 PROWLARR_URL="http://prowlarr:9696"
 QBT_URL="http://qbittorrent:8080"
-QBIT_CONFIG="/config/qbittorrent/qBittorrent/qBittorrent.conf"
-
 
 wait_for() {
   local url=$1
@@ -26,58 +19,25 @@ wait_for() {
   echo "✅ $name is up!"
 }
 
+# Wait for services to be ready
 wait_for "$SONARR_URL" "Sonarr"
 wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBT_URL" "qBittorrent"
 
-echo "⚙ Checking qBittorrent credentials..."
-echo "⏳ Waiting for qBittorrent config to be created at $QBIT_CONFIG..."
-for i in {1..30}; do
-  if [ -f "$QBIT_CONFIG" ]; then
-    echo "✅ Found qBittorrent config file."
-    break
-  fi
-  sleep 2
-  if [ "$i" -eq 30 ]; then
-    echo "❌ Timed out waiting for qBittorrent config. Exiting."
+# Validate and show API keys
+for SERVICE in SONARR RADARR PROWLARR; do
+  VAR_NAME="${SERVICE}_API_KEY"
+  VAR_VALUE="${!VAR_NAME}"
+  if [ -z "$VAR_VALUE" ]; then
+    echo "❌ $VAR_NAME is missing in .env"
     exit 1
+  else
+    echo "🔑 $VAR_NAME = $VAR_VALUE"
   fi
-
 done
 
-echo "🔧 Setting qBittorrent credentials..."
-sed -i "s/WebUI\sUsername=.*/WebUI\sUsername=$QBT_USER/" "$QBIT_CONFIG"
-sed -i "s/WebUI\sPassword_PBKDF2=.*/WebUI\sPassword_PBKDF2=""/" "$QBIT_CONFIG"
-echo "🔁 Restarting qBittorrent to apply credentials..."
-curl -X POST "$QBT_URL/api/v2/app/shutdown" >/dev/null 2>&1 || true
-sleep 5
-
-# Wait again for qBittorrent
-wait_for "$QBT_URL" "qBittorrent"
-
-# Retrieve API keys if not set
-if [ -z "$SONARR_API_KEY" ]; then
-  SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 SONARR_API_KEY: $SONARR_API_KEY"
-fi
-if [ -z "$RADARR_API_KEY" ]; then
-  RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 RADARR_API_KEY: $RADARR_API_KEY"
-fi
-if [ -z "$PROWLARR_API_KEY" ]; then
-  PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
-  echo "🔑 PROWLARR_API_KEY: $PROWLARR_API_KEY"
-fi
-
-if [ -z "$SONARR_API_KEY" ] || [ -z "$RADARR_API_KEY" ] || [ -z "$PROWLARR_API_KEY" ]; then
-  echo "❌ Missing one or more API keys."
-  exit 1
-fi
-
-# ----------------------
-# Configure download clients
-# ----------------------
+# Configure Sonarr → qBittorrent
 echo "📡 Configuring Sonarr → qBittorrent..."
 curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
@@ -93,11 +53,11 @@ curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
       { "name": "username", "value": "'"$QBT_USER"'" },
       { "name": "password", "value": "'"$QBT_PASS"'" },
       { "name": "category", "value": "sonarr" },
-      { "name": "recentTvPriority", "value": 1 },
-      { "name": "olderTvPriority", "value": 1 }
+      { "name": "priority", "value": 1 }
     ]
   }'
 
+# Configure Radarr → qBittorrent
 echo "📡 Configuring Radarr → qBittorrent..."
 curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" \
@@ -117,25 +77,24 @@ curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     ]
   }'
 
-# ----------------------
-# Root folders
-# ----------------------
+# Add root folders (ignores errors if they already exist)
 echo "📁 Adding root folders..."
 curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{ "path": "/tv" }'
+  -d '{ "path": "/tv" }' || echo "⚠️ Sonarr root folder /tv may already exist."
 
 curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
   -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{ "path": "/movies" }'
+  -d '{ "path": "/movies" }' || echo "⚠️ Radarr root folder /movies may already exist."
 
-# ----------------------
-# Link Sonarr/Radarr to Prowlarr
-# ----------------------
+# Skip quality profiles due to Sonarr API issue
+echo "🎞 Skipping quality profile for Sonarr due to known API issues."
+
+# Link Sonarr → Prowlarr
 echo "🔗 Linking Sonarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d ' {
+  -d '{
     "name": "Sonarr",
     "implementation": "Sonarr",
     "enableRss": true,
@@ -148,12 +107,13 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
       { "name": "apiKey", "value": "'"$SONARR_API_KEY"'" },
       { "name": "url", "value": "http://sonarr:8989" }
     ]
-  }'
+  }' || echo "⚠️ Sonarr already linked to Prowlarr."
 
+# Link Radarr → Prowlarr
 echo "🔗 Linking Radarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d ' {
+  -d '{
     "name": "Radarr",
     "implementation": "Radarr",
     "enableRss": true,
@@ -166,6 +126,6 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
       { "name": "apiKey", "value": "'"$RADARR_API_KEY"'" },
       { "name": "url", "value": "http://radarr:7878" }
     ]
-  }'
+  }' || echo "⚠️ Radarr already linked to Prowlarr."
 
-echo "✅ All services connected!"
+echo "✅ Autoconfig complete!"
