@@ -13,7 +13,7 @@ services:
       - ./npm/letsencrypt:/etc/letsencrypt
     networks:
       - web
-      - internalx
+      - internal
 
   portainer:
     image: portainer/portainer-ce:latest
