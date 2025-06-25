@@ -128,8 +128,8 @@ services:
       - TZ=${TZ}
       - WEBUI_PORT=8080
       # You can optionally set a custom username/password via env, but newer qBittorrent might ignore in favor of random password if not set:
-      # - WEBUI_USERNAME=admin
-      # - WEBUI_PASSWORD=strongpassword
+      - WEBUI_USERNAME=admin
+      - WEBUI_PASSWORD=adminadmin
     ports:
       - 8080:8080 # qBittorrent Web UI
       - 6881:6881 # BitTorrent listen port
