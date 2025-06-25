@@ -178,6 +178,4 @@ services:
       -c "apk add --no-cache bash curl jq \
       && chmod +x /init/auto-config.sh \
       && /init/auto-config.sh"
-    networks:
-      - internal
     restart: "no"
