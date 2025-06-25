@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # 1. Rclone service to mount Google Drive
   rclone:
@@ -53,7 +51,7 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
       - VERSION=latest
-      # - PLEX_CLAIM=<your_claim_token>
+      - PLEX_CLAIM=${PLEX_CLAIM}
     ports:
       - 32400:32400/tcp
       - 32400:32400/udp
