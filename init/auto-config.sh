@@ -148,7 +148,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "fields": [
       {"name":"baseUrl","value":"http://sonarr:8989"},
       {"name":"apiKey","value":"'"$SONARR_API_KEY"'"},
-      {"name":"url","value":"http://prowlarr:9696"}
+      {"name":"url","value":"'"$SONARR_API_KEY"'"}
     ]
   }' \
   && echo "✅ Sonarr linked to Prowlarr" \
@@ -169,7 +169,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "fields": [
       {"name":"baseUrl","value":"http://radarr:7878"},
       {"name":"apiKey","value":"'"$RADARR_API_KEY"'"},
-      {"name":"url","value":"http://prowlarr:9696"}
+      {"name":"url","value":"'"$RADARR_API_KEY"'"}
     ]
   }' \
   && echo "✅ Radarr linked to Prowlarr" \
