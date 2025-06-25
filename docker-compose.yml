@@ -1,6 +1,6 @@
 services:
   # 1. Rclone service to mount Google Drive
-    rclone:
+  rclone:
     image: rclone/rclone:latest
     container_name: rclone
     cap_add:
@@ -46,7 +46,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
 
   # 2. Plex Media Server
   plex:
