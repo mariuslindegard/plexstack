@@ -75,6 +75,7 @@ curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     "fields": [
       { "name": "host", "value": "qbittorrent" },
       { "name": "port", "value": 8080 },
+      { "name": "priority", "value": 1 },
       { "name": "username", "value": "'"$QBT_USER"'" },
       { "name": "password", "value": "'"$QBT_PASS"'" },
       { "name": "category", "value": "radarr" }
