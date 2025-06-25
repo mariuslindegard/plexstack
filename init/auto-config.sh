@@ -1,10 +1,13 @@
 #!/bin/bash
 set -e
 
-CONFIG_PATH="/config/qbittorrent/qBittorrent/config/qBittorrent.conf"
-QBT_CONTAINER="qbittorrent"
-
 source /.env
+
+SONARR_URL="http://sonarr:8989"
+RADARR_URL="http://radarr:7878"
+PROWLARR_URL="http://prowlarr:9696"
+QBT_URL="http://qbittorrent:8080"
+QBIT_CONFIG="/config/qbittorrent/qBittorrent/qBittorrent.conf"
 
 wait_for() {
   local url=$1
@@ -16,37 +19,37 @@ wait_for() {
   echo "✅ $name is up!"
 }
 
-SONARR_URL="http://sonarr:8989"
-RADARR_URL="http://radarr:7878"
-PROWLARR_URL="http://prowlarr:9696"
-QBT_URL="http://qbittorrent:8080"
-
 wait_for "$SONARR_URL" "Sonarr"
 wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBT_URL" "qBittorrent"
 
-# -------- qBittorrent config injection --------
 echo "⚙ Checking qBittorrent credentials..."
-
-if [ ! -f "$CONFIG_PATH" ]; then
-  echo "⏳ Waiting for qBittorrent config to be created..."
-  until [ -f "$CONFIG_PATH" ]; do
-    sleep 2
-  done
+echo "⏳ Waiting for qBittorrent config to be created at $QBIT_CONFIG..."
+for i in {1..30}; do
+  if [ -f "$QBIT_CONFIG" ]; then
+    echo "✅ Found qBittorrent config file."
+    break
+  fi
   sleep 2
-fi
+  if [ "$i" -eq 30 ]; then
+    echo "❌ Timed out waiting for qBittorrent config. Exiting."
+    exit 1
+  fi
 
-if ! grep -q "WebUI\\.Password_ha1" "$CONFIG_PATH"; then
-  echo "➕ Injecting WebUI credentials into qBittorrent.conf"
-  echo "WebUI\\.Username=$QBT_USER" >> "$CONFIG_PATH"
-  echo "WebUI\\.Password_ha1=@ByteArray(\"$(echo -n "$QBT_USER:$QBT_PASS" | md5sum | cut -d' ' -f1)\")" >> "$CONFIG_PATH"
-  echo "WebUI\\.CSRFProtection=false" >> "$CONFIG_PATH"
-  docker restart $QBT_CONTAINER
-  wait_for "$QBT_URL" "qBittorrent (post-restart)"
-fi
+done
 
-# -------- Get API keys if needed --------
+echo "🔧 Setting qBittorrent credentials..."
+sed -i "s/WebUI\sUsername=.*/WebUI\sUsername=$QBT_USER/" "$QBIT_CONFIG"
+sed -i "s/WebUI\sPassword_PBKDF2=.*/WebUI\sPassword_PBKDF2=""/" "$QBIT_CONFIG"
+echo "🔁 Restarting qBittorrent to apply credentials..."
+curl -X POST "$QBT_URL/api/v2/app/shutdown" >/dev/null 2>&1 || true
+sleep 5
+
+# Wait again for qBittorrent
+wait_for "$QBT_URL" "qBittorrent"
+
+# Retrieve API keys if not set
 if [ -z "$SONARR_API_KEY" ]; then
   SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
   echo "🔑 SONARR_API_KEY: $SONARR_API_KEY"
@@ -60,7 +63,14 @@ if [ -z "$PROWLARR_API_KEY" ]; then
   echo "🔑 PROWLARR_API_KEY: $PROWLARR_API_KEY"
 fi
 
-# -------- Connect qBittorrent --------
+if [ -z "$SONARR_API_KEY" ] || [ -z "$RADARR_API_KEY" ] || [ -z "$PROWLARR_API_KEY" ]; then
+  echo "❌ Missing one or more API keys."
+  exit 1
+fi
+
+# ----------------------
+# Configure download clients
+# ----------------------
 echo "📡 Configuring Sonarr → qBittorrent..."
 curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
@@ -76,7 +86,8 @@ curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
       { "name": "username", "value": "'"$QBT_USER"'" },
       { "name": "password", "value": "'"$QBT_PASS"'" },
       { "name": "category", "value": "sonarr" },
-      { "name": "priority", "value": 1 }
+      { "name": "recentTvPriority", "value": 1 },
+      { "name": "olderTvPriority", "value": 1 }
     ]
   }'
 
@@ -99,16 +110,25 @@ curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     ]
   }'
 
-# -------- Root folders --------
-echo "📁 Ensuring root folders exist..."
-curl -s -X POST "$SONARR_URL/api/v3/rootfolder" -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" -d '{ "path": "/tv" }' || true
-curl -s -X POST "$RADARR_URL/api/v3/rootfolder" -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" -d '{ "path": "/movies" }' || true
+# ----------------------
+# Root folders
+# ----------------------
+echo "📁 Adding root folders..."
+curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
+  -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
+  -d '{ "path": "/tv" }'
 
-# -------- Prowlarr Integration --------
+curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
+  -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json" \
+  -d '{ "path": "/movies" }'
+
+# ----------------------
+# Link Sonarr/Radarr to Prowlarr
+# ----------------------
 echo "🔗 Linking Sonarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
+  -d ' {
     "name": "Sonarr",
     "implementation": "Sonarr",
     "enableRss": true,
@@ -117,15 +137,16 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "SonarrSettings",
     "fields": [
+      { "name": "baseUrl", "value": "" },
       { "name": "apiKey", "value": "'"$SONARR_API_KEY"'" },
       { "name": "url", "value": "http://sonarr:8989" }
     ]
-  }' || true
+  }'
 
 echo "🔗 Linking Radarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
+  -d ' {
     "name": "Radarr",
     "implementation": "Radarr",
     "enableRss": true,
@@ -134,9 +155,10 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "RadarrSettings",
     "fields": [
+      { "name": "baseUrl", "value": "" },
       { "name": "apiKey", "value": "'"$RADARR_API_KEY"'" },
       { "name": "url", "value": "http://radarr:7878" }
     ]
-  }' || true
+  }'
 
-echo "✅ All services connected and configured!"
+echo "✅ All services connected!"
