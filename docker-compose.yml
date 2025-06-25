@@ -182,7 +182,7 @@ services:
     networks:
       - internal
 
-    autoconfig:
+  autoconfig:
     image: alpine:latest
     container_name: autoconfig
     depends_on:
@@ -198,7 +198,6 @@ services:
     networks:
       - internal
     restart: "no"
-
 
 networks:
   web:
