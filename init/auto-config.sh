@@ -41,23 +41,6 @@ wait_for "$RADARR_URL"   "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBT_URL"      "qBittorrent"
 
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                    Fetch API keys if not provided                          │
-# └────────────────────────────────────────────────────────────────────────────┘
-if [ -z "$SONARR_API_KEY" ]; then
-  SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 SONARR_API_KEY: $SONARR_API_KEY"
-fi
-
-if [ -z "$RADARR_API_KEY" ]; then
-  RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 RADARR_API_KEY: $RADARR_API_KEY"
-fi
-
-if [ -z "$PROWLARR_API_KEY" ]; then
-  PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
-  echo "🔑 PROWLARR_API_KEY: $PROWLARR_API_KEY"
-fi
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                      Sonarr → qBittorrent                                  │
@@ -163,9 +146,9 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "SonarrSettings",
     "fields": [
-      {"name":"baseUrl","value":""},
+      {"name":"baseUrl","value":"http://sonarr:8989"},
       {"name":"apiKey","value":"'"$SONARR_API_KEY"'"},
-      {"name":"url","value":"'"$SONARR_URL"'"}
+      {"name":"url","value":"http://prowlarr:9696"}
     ]
   }' \
   && echo "✅ Sonarr linked to Prowlarr" \
@@ -184,9 +167,9 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "RadarrSettings",
     "fields": [
-      {"name":"baseUrl","value":"http://radarr:8989"},
+      {"name":"baseUrl","value":"http://radarr:7878"},
       {"name":"apiKey","value":"'"$RADARR_API_KEY"'"},
-      {"name":"url","value":"'"$RADARR_URL"'"}
+      {"name":"url","value":"http://prowlarr:9696"}
     ]
   }' \
   && echo "✅ Radarr linked to Prowlarr" \
