@@ -19,14 +19,15 @@ services:
       - TZ=${TZ}
       - RCLONE_CONFIG=/config/rclone/rclone.conf
     volumes:
-      - ./rclone-config:/config/rclone:ro
+      # allow rclone to update its config file
+      - ./rclone-config:/config/rclone
       - ${MEDIA_MOUNT}:${MEDIA_MOUNT}:rshared
       - /mnt/rclone_cache:/mnt/rclone_cache
     entrypoint:
       - /bin/sh
       - -c
       - |
-        # 1) clean leftover files
+        # 1) clean any leftover files (if not a mountpoint)
         if [ -d "${MEDIA_MOUNT}" ] && [ "$(ls -A "${MEDIA_MOUNT}")" ]; then
           echo "[rclone] Cleaning stale files in ${MEDIA_MOUNT}"
           rm -rf "${MEDIA_MOUNT}"/*
@@ -35,8 +36,9 @@ services:
         # 2) enable allow-other in FUSE
         printf 'user_allow_other\n' > /etc/fuse.conf
 
-        # 3) mount the remote
+        # 3) mount the remote (allow mounting even if non-empty)
         exec rclone mount ${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH} "${MEDIA_MOUNT}" \
+          --allow-non-empty \
           --allow-other \
           --dir-cache-time 72h \
           --poll-interval 15s \
