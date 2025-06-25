@@ -161,3 +161,23 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock # allows Portainer to control Docker
       - ./portainer/data:/data
+
+  autoconfig:
+    image: alpine:latest
+    container_name: autoconfig
+    depends_on:
+      - sonarr
+      - radarr
+      - qbittorrent
+      - prowlarr
+    volumes:
+      - ./init:/init
+      - ./.env:/.env:ro
+    entrypoint: /bin/sh
+    command: >
+      -c "apk add --no-cache bash curl jq \
+      && chmod +x /init/auto-config.sh \
+      && /init/auto-config.sh"
+    networks:
+      - internal
+    restart: "no"
