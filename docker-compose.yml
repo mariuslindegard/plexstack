@@ -1,181 +1,165 @@
+version: "3.8"
+
 services:
-  # 1. Rclone service to mount Google Drive
   rclone:
     image: rclone/rclone:latest
     container_name: rclone
-    # Give the container privileges to use FUSE for mounting
+    restart: unless-stopped
     cap_add:
       - SYS_ADMIN
+      - DAC_READ_SEARCH
     devices:
-      - /dev/fuse:/dev/fuse
-    security_opt:
-      - apparmor:unconfined
-    restart: unless-stopped
+      - /dev/fuse
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
     volumes:
-      # Mount rclone config directory from host (contains rclone.conf)
-      - ./rclone-config:/config/rclone
-      # Bind mount for the Google Drive mount point, with shared propagation
-      - ${MEDIA_MOUNT}:${MEDIA_MOUNT}:rshared
-      # (Optional) Mount a local cache for rclone if desired
-      - /mnt/rclone_cache:/mnt/rclone_cache
+      - type: bind
+        source: ${MEDIA_MOUNT}
+        target: ${MEDIA_MOUNT}
+        bind:
+          propagation: rshared
+      - type: bind
+        source: ${RCLONE_CACHE}
+        target: /cache
     command: >
-      mount ${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH} ${MEDIA_MOUNT} 
-      --allow-other --dir-cache-time 72h --poll-interval 15s 
-      --vfs-cache-mode full --vfs-cache-max-size 100G --vfs-cache-max-age 24h 
-      --uid ${PUID} --gid ${PGID}
-    # Rclone mount command breakdown:
-    # - RCLONE_REMOTE_NAME and RCLONE_REMOTE_PATH should be set in .env (e.g., gdrive and "Media" or empty for root).
-    # - allow-other allows other containers/users to see fuse mount.
-    # - vfs-cache-mode full + cache settings: enable caching files on local disk to improve Plex performance.
-    # - uid/gid to have files show with correct ownership.
+      /bin/sh -c "
+        # If mountpoint is NOT active, but directory contains leftover files, clean it:
+        if ! mountpoint -q ${MEDIA_MOUNT} && [ \"\$(ls -A ${MEDIA_MOUNT})\" ]; then
+          echo \"[rclone] Cleaning stale files in ${MEDIA_MOUNT}\";
+          rm -rf ${MEDIA_MOUNT}/*;
+        fi;
+        # Now mount Google Drive via rclone:
+        exec rclone mount ${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH} ${MEDIA_MOUNT}
+          --allow-other --dir-cache-time 72h --poll-interval 15s
+          --vfs-cache-mode full --vfs-cache-max-size 50G --vfs-cache-max-age 24h
+          --uid ${PUID} --gid ${PGID}
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "mountpoint -q ${MEDIA_MOUNT}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
-  # 2. Plex Media Server
-  plex:
-    image: lscr.io/linuxserver/plex:latest
-    container_name: plex
-    network_mode: bridge # we'll still use ports since Plex can use UPnP; or use host mode if you prefer
-    restart: unless-stopped
-    depends_on:
-      - rclone # ensure rclone service starts first
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - VERSION=latest # or set to plexpass if you have Plex Pass and want beta features
-      # - PLEX_CLAIM=<your_claim_token>  # optional: claim token for automatic server sign-in:contentReference[oaicite:10]{index=10}
-    ports:
-      - 32400:32400/tcp # Plex web/media interface
-      - 32400:32400/udp
-      - 32469:32469/udp # for DLNA
-      - 32469:32469/tcp
-      - 5353:5353/udp # mDNS for network discovery
-      - 32410:32410/udp # Plex companion discovery
-      - 32412:32412/udp
-      - 32413:32413/udp
-      - 32414:32414/udp
-    volumes:
-      - ${MEDIA_MOUNT}:/media:rslave # Mount Google Drive media (as /media in Plex; using rslave for mount prop.):contentReference[oaicite:11]{index=11}
-      - ./plex/config:/config # Plex config/library files
-      - /transcode:/transcode # optional: transcode temp directory (ensure enough space)
-
-  # 3. Sonarr (TV Shows Manager)
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
     ports:
-      - 8989:8989 # Sonarr web UI (you may not need this exposed if using Nginx Proxy)
+      - "8989:8989"
     volumes:
-      - ./sonarr/config:/config
-      - ${MEDIA_MOUNT}/TV:/media/tv # TV library folder on Google Drive (assumes "TV" subfolder for shows)
-      - ${DOWNLOADS_DIR}:/downloads # Local downloads (completed files from qbit)
+      - ${SONARR_CONFIG}:/config
+      - ${MEDIA_MOUNT}/TV:/media/tv:rw
+      - ${DOWNLOADS_DIR}:/downloads:rw
 
-  # 4. Radarr (Movies Manager)
   radarr:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
     ports:
-      - 7878:7878 # Radarr web UI
+      - "7878:7878"
     volumes:
-      - ./radarr/config:/config
-      - ${MEDIA_MOUNT}/Movies:/media/movies # Movies library on Google Drive (assumes "Movies" subfolder)
-      - ${DOWNLOADS_DIR}:/downloads # Local downloads from qbit
+      - ${RADARR_CONFIG}:/config
+      - ${MEDIA_MOUNT}/Movies:/media/movies:rw
+      - ${DOWNLOADS_DIR}:/downloads:rw
 
-  # 5. Prowlarr (Indexer Manager)
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      rclone:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - ${MEDIA_MOUNT}:/media:rslave
+      - ${PLEX_CONFIG}:/config
+      - ${PLEX_TRANSCODE}:/transcode
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    depends_on:
+      rclone:
+        condition: service_healthy
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=${QBITTORRENT_WEBUI_PORT}
+    ports:
+      - "${QBITTORRENT_WEBUI_PORT}:${QBITTORRENT_WEBUI_PORT}"
+      - "6881:6881"
+      - "6881:6881/udp"
+    volumes:
+      - ${QBITTORRENT_CONFIG}:/config
+      - ${DOWNLOADS_DIR}:/downloads:rw
+
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
     ports:
-      - 9696:9696 # Prowlarr web UI
+      - "9696:9696"
     volumes:
-      - ./prowlarr/config:/config
-      - ${DOWNLOADS_DIR}:/downloads # (Optional, Prowlarr can use this for indexer DL tests, etc.)
+      - ${PROWLARR_CONFIG}:/config
+      - ${DOWNLOADS_DIR}:/downloads:rw
 
-  # 6. qBittorrent (Downloader)
-  qbittorrent:
-    image: linuxserver/qbittorrent:4.5.5
-    container_name: qbittorrent
+  nginx-proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: nginx-proxy-manager
     restart: unless-stopped
     depends_on:
-      - rclone
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - WEBUI_PORT=8080
-      # You can optionally set a custom username/password via env, but newer qBittorrent might ignore in favor of random password if not set:
-      - WEBUI_USERNAME=admin
-      - WEBUI_PASSWORD=adminadmin
+      rclone:
+        condition: service_healthy
     ports:
-      - 8080:8080 # qBittorrent Web UI
-      - 6881:6881 # BitTorrent listen port
-      - 6881:6881/udp # BitTorrent DHT UDP port
+      - "80:80"
+      - "81:81"
+      - "443:443"
     volumes:
-      - ./qbittorrent/config:/config
-      - ${DOWNLOADS_DIR}:/downloads # Downloads directory on host (we'll use subdirs inside)
+      - ${NGINX_PROXY_MANAGER_DATA}:/data
+      - ${NGINX_PROXY_MANAGER_CONFIG}:/config
+      - ${NGINX_PROXY_MANAGER_LETSENCRYPT}:/etc/letsencrypt
 
-  # 7. Nginx Proxy Manager (for reverse proxy and SSL)
-  nginx_proxy_manager:
-    image: "jc21/nginx-proxy-manager:latest"
-    container_name: nginxproxymanager
-    restart: unless-stopped
-    ports:
-      - 80:80 # HTTP
-      - 443:443 # HTTPS
-      - 81:81 # NPM Web UI
-    volumes:
-      - ./npm/data:/data
-      - ./npm/letsencrypt:/etc/letsencrypt
-
-  # 8. Portainer (Docker management UI)
   portainer:
     image: portainer/portainer-ce:latest
     container_name: portainer
     restart: unless-stopped
     ports:
-      - 9000:9000 # Portainer UI
+      - "9000:9000"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock # allows Portainer to control Docker
-      - ./portainer/data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${PORTAINER_DATA}:/data
 
-  autoconfig:
-    image: alpine:latest
-    container_name: autoconfig
-    depends_on:
-      - sonarr
-      - radarr
-      - qbittorrent
-      - prowlarr
-    volumes:
-      - ./init:/init
-      - ./.env:/.env:ro
-    entrypoint: /bin/sh
-    command: >
-      -c "apk add --no-cache bash curl jq \
-      && chmod +x /init/auto-config.sh \
-      && /init/auto-config.sh"
-    restart: "no"
+networks:
+  default:
+    name: media
