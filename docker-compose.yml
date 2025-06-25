@@ -15,12 +15,12 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
     command: |
-      # wipe stale files if mountpoint exists but not mounted
+      # Clean up any leftover files if dir exists but not mounted
       if [ -d "${MEDIA_MOUNT}" ] && [ "$(ls -A "${MEDIA_MOUNT}")" ]; then
         echo "[rclone] Cleaning stale files in ${MEDIA_MOUNT}";
         rm -rf "${MEDIA_MOUNT}"/*;
       fi
-      # exec the real mount
+      # Exec the actual mount
       exec rclone mount "${RCLONE_REMOTE_NAME}:${RCLONE_REMOTE_PATH}" "${MEDIA_MOUNT}" \
         --allow-other \
         --dir-cache-time 72h \
@@ -38,7 +38,7 @@ services:
     volumes:
       - ./rclone-config:/config/rclone
       - ${MEDIA_MOUNT}:${MEDIA_MOUNT}:rshared
-      - ${RCLONE_CACHE}:/mnt/rclone_cache
+      - ${RCLONE_CACHE:-/mnt/rclone_cache}:/mnt/rclone_cache
     healthcheck:
       test: ["CMD-SHELL", "mountpoint -q ${MEDIA_MOUNT}"]
       interval: 10s
@@ -196,7 +196,7 @@ services:
       - ./init:/init
       - ./.env:/.env:ro
     entrypoint: ["/bin/sh", "-c"]
-    command: >
+    command: |
       apk add --no-cache bash curl jq && \
       chmod +x /init/auto-config.sh && \
       /init/auto-config.sh
