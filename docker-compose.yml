@@ -187,3 +187,21 @@ networks:
     external: false
   internal:
     driver: bridge
+
+autoconfig:
+  image: curlimages/curl:latest
+  container_name: autoconfig
+  depends_on:
+    - sonarr
+    - radarr
+    - qbittorrent
+    - prowlarr
+  volumes:
+    - ./init:/init:ro
+    - ./.env:/.env:ro
+  entrypoint: ["/bin/sh", "-c"]
+  command: |
+    apk add --no-cache bash jq && chmod +x /init/auto-config.sh && /init/auto-config.sh
+  networks:
+    - internal
+  restart: "no"
