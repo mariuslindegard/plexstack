@@ -1,3 +1,5 @@
+version: "3.8"
+
 services:
   proxy-manager:
     image: jc21/nginx-proxy-manager:latest
@@ -9,8 +11,8 @@ services:
       - "81:81"
     env_file: ./.env
     volumes:
-      - ./npm/data:/data
-      - ./npm/letsencrypt:/etc/letsencrypt
+      - proxy_data:/data
+      - proxy_letsencrypt:/etc/letsencrypt
     networks:
       - web
       - internal
@@ -22,7 +24,7 @@ services:
     command: -H unix:///var/run/docker.sock
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./portainer/data:/data
+      - portainer_data:/data
     ports:
       - "9000:9000"
     networks:
@@ -39,8 +41,8 @@ services:
       - WEBUI_PORT=8080
       - TZ=Europe/Oslo
     volumes:
-      - ./downloads:/downloads
-      - ./config/qbittorrent:/config
+      - qbittorrent_config:/config
+      - downloads:/downloads
     networks:
       - internal
 
@@ -55,8 +57,8 @@ services:
       - TZ=Europe/Oslo
       - SONARR_API_KEY=${SONARR_API_KEY}
     volumes:
-      - ./config/sonarr:/config
-      - ./downloads:/downloads
+      - sonarr_config:/config
+      - downloads:/downloads
       - ./media/tv:/tv
     networks:
       - internal
@@ -72,8 +74,8 @@ services:
       - TZ=Europe/Oslo
       - RADARR_API_KEY=${RADARR_API_KEY}
     volumes:
-      - ./config/radarr:/config
-      - ./downloads:/downloads
+      - radarr_config:/config
+      - downloads:/downloads
       - ./media/movies:/movies
     networks:
       - internal
@@ -89,7 +91,7 @@ services:
       - TZ=Europe/Oslo
       - PROWLARR_API_KEY=${PROWLARR_API_KEY}
     volumes:
-      - ./config/prowlarr:/config
+      - prowlarr_config:/config
     networks:
       - internal
 
@@ -123,7 +125,7 @@ services:
       - TZ=Europe/Oslo
       - PLEX_CLAIM=${PLEX_CLAIM}
     volumes:
-      - ./config/plex:/config
+      - plex_config:/config
       - ./media/tv:/tv
       - ./media/movies:/movies
       - ${RCLONE_MOUNT_PATH}:/clouddrive
@@ -139,7 +141,7 @@ services:
       - PLEX_TOKEN=${PLEX_CLAIM}
       - TZ=Europe/Oslo
     volumes:
-      - ./config/plexmeta:/config
+      - plexmeta_config:/config
       - ./media:/media
     networks:
       - internal
@@ -166,3 +168,15 @@ networks:
     external: false
   internal:
     driver: bridge
+
+volumes:
+  proxy_data:
+  proxy_letsencrypt:
+  portainer_data:
+  qbittorrent_config:
+  sonarr_config:
+  radarr_config:
+  prowlarr_config:
+  plex_config:
+  plexmeta_config:
+  downloads:
