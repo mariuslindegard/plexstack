@@ -1,0 +1,190 @@
+version: '3.8'
+services:
+  # ------------------------------------
+  # Nginx Proxy Manager
+  # ------------------------------------
+  proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"     # HTTP
+      - "443:443"   # HTTPS
+      - "81:81"     # NPM UI
+    env_file: ./.env
+    environment:
+      DB_SQLITE_FILE: "/data/database.sqlite"
+      # Alternatively, configure a MySQL/MariaDB if you prefer
+    volumes:
+      - ./npm/data:/data
+      - ./npm/letsencrypt:/etc/letsencrypt
+    networks:
+      - web
+      - internal
+
+  # ------------------------------------
+  # Portainer (Docker management UI)
+  # ------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer/data:/data
+    ports:
+      - "9000:9000"
+    networks:
+      - web
+
+  # ------------------------------------
+  # qBittorrent
+  # ------------------------------------
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - WEBUI_PORT=8080
+      - TZ=Europe/Oslo
+      - QBT_USERNAME=${QBT_USER}
+      - QBT_PASSWORD=${QBT_PASS}
+    volumes:
+      - ./downloads:/downloads
+      - ./config/qbittorrent:/config
+    networks:
+      - internal
+
+  # ------------------------------------
+  # Sonarr (TV shows)
+  # ------------------------------------
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Oslo
+      - SONARR_API_KEY=${SONARR_API_KEY}
+    volumes:
+      - ./config/sonarr:/config
+      - ./downloads:/downloads
+      - ./media/tv:/tv
+    networks:
+      - internal
+
+  # ------------------------------------
+  # Radarr (movies)
+  # ------------------------------------
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Oslo
+      - RADARR_API_KEY=${RADARR_API_KEY}
+    volumes:
+      - ./config/radarr:/config
+      - ./downloads:/downloads
+      - ./media/movies:/movies
+    networks:
+      - internal
+
+  # ------------------------------------
+  # Prowlarr (indexers)
+  # ------------------------------------
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:develop
+    container_name: prowlarr
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Oslo
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
+    volumes:
+      - ./config/prowlarr:/config
+    networks:
+      - internal
+
+  # ------------------------------------
+  # rclone mount (Google Drive)
+  # ------------------------------------
+  rclone:
+    image: rclone/rclone:latest
+    container_name: rclone
+    restart: unless-stopped
+    env_file: ./.env
+    command: >
+      mount ${RCLONE_REMOTE}
+      ${RCLONE_MOUNT_PATH}
+      --rc
+      --allow-other
+      --buffer-size 256M
+      --dir-cache-time 72h
+      --vfs-cache-mode writes
+      --vfs-cache-max-age 5m
+      --vfs-read-chunk-size 128M
+    cap_add:
+      - SYS_ADMIN   # required for FUSE mount
+    devices:
+      - /dev/fuse
+    volumes:
+      - ./config/rclone:/config/rclone
+    networks:
+      - internal
+
+  # ------------------------------------
+  # Plex Media Server
+  # ------------------------------------
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Oslo
+      - PLEX_CLAIM=${PLEX_CLAIM}  # optional
+    volumes:
+      - ./config/plex:/config
+      - ./media/tv:/tv
+      - ./media/movies:/movies
+      - ${RCLONE_MOUNT_PATH}:/clouddrive    # map your google drive mount
+    networks:
+      - internal
+
+  # ------------------------------------
+  # PlexIO (e.g. plex-meta-manager or Tautulli)
+  # ------------------------------------
+  # Example: plex-meta-manager
+  plexmeta:
+    image: ghcr.io/meisnate12/plex-meta-manager:latest
+    container_name: plexmeta
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PLEX_TOKEN=${PLEX_CLAIM}   # or your PMS token
+      - TZ=Europe/Oslo
+    volumes:
+      - ./config/plexmeta:/config
+      - ./media:/media
+    networks:
+      - internal
+
+networks:
+  web:
+    external: false
+  internal:
+    driver: bridge
