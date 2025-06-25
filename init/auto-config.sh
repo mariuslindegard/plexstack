@@ -96,12 +96,14 @@ existing_radarr=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/do
 if echo "$existing_radarr" | jq -e '.[] | select(.implementation=="QBitTorrent")' >/dev/null; then
   echo "✅ Radarr already has qBittorrent client"
 else
-  curl --fail -s -X POST "$RADARR_URL/api/v3/downloadclient" \
+  # capture Radarr’s response for debugging
+  resp=$(curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     -H "X-Api-Key: $RADARR_API_KEY" \
     -H "Content-Type: application/json" \
     -d '{
       "enable": true,
       "name": "qBittorrent",
+      "protocol": "torrent",
       "implementation": "QBitTorrent",
       "configContract": "QBitTorrentSettings",
       "priority": 1,
@@ -112,9 +114,13 @@ else
         {"name":"password","value":"'"$WEBUI_PASSWORD"'"},
         {"name":"category","value":"radarr"}
       ]
-    }' \
-    && echo "✅ Radarr → qBittorrent configured" \
-    || echo "❌ Failed to configure Radarr → qBittorrent"
+    }')
+  if echo "$resp" | grep -q '"name"'; then
+    echo "✅ Radarr → qBittorrent configured"
+  else
+    echo "❌ Failed to configure Radarr → qBittorrent. Response was:"
+    echo "$resp"
+  fi
 fi
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
