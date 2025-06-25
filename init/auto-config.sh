@@ -3,15 +3,10 @@ set -e
 
 echo "🔧 Starting autoconfig..."
 
-ENV_FILE="/.env"
-
-if [ ! -f "$ENV_FILE" ]; then
-  echo "❌ .env file not found. Make sure it's mounted correctly."
-  exit 1
-fi
-
 # Load environment variables including QBT_USER and QBT_PASS
-source "$ENV_FILE"
+# Ensure .env is mounted read-write if you want to auto-update it
+# Otherwise, export env vars beforehand
+source "/.env"
 
 # Helper: wait until a service is reachable
 wait_for() {
@@ -36,120 +31,41 @@ wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBITTORRENT_URL" "qBittorrent"
 
-# Fetch and write API keys if missing
-update_env_if_missing() {
-  local key=$1
-  local value=$2
-  if ! grep -q "^$key=" "$ENV_FILE"; then
-    echo "$key=$value" >> "$ENV_FILE"
-    echo "💾 Appended $key to .env"
-  fi
-}
+# Retrieve API keys (echo to user)
+echo "🔑 Sonarr API Key:" 
+curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey'
+echo "🔑 Radarr API Key:" 
+curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey'
+echo "🔑 Prowlarr API Key:" 
+curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey'
 
-# Sonarr API key
-if [ -z "$SONARR_API_KEY" ]; then
-  SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 SONARR_API_KEY=$SONARR_API_KEY"
-  update_env_if_missing "SONARR_API_KEY" "$SONARR_API_KEY"
-fi
-
-# Radarr API key
-if [ -z "$RADARR_API_KEY" ]; then
-  RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
-  echo "🔑 RADARR_API_KEY=$RADARR_API_KEY"
-  update_env_if_missing "RADARR_API_KEY" "$RADARR_API_KEY"
-fi
-
-# Prowlarr API key
-if [ -z "$PROWLARR_API_KEY" ]; then
-  PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
-  echo "🔑 PROWLARR_API_KEY=$PROWLARR_API_KEY"
-  update_env_if_missing "PROWLARR_API_KEY" "$PROWLARR_API_KEY"
-fi
-
+echo
 # Default qBittorrent credentials
 QBT_USER=${QBT_USER:-admin}
 QBT_PASS=${QBT_PASS:-adminadmin}
 
-# Link Sonarr to qBittorrent
 echo "📡 Configuring Sonarr → qBittorrent..."
 curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $SONARR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"enable\": true,
-    \"name\": \"qBittorrent\",
-    \"protocol\": \"torrent\",
-    \"implementation\": \"qBittorrent\",
-    \"configContract\": \"qBittorrentSettings\",
-    \"fields\": [
-      { \"name\": \"host\", \"value\": \"qbittorrent\" },
-      { \"name\": \"port\", \"value\": 8080 },
-      { \"name\": \"username\", \"value\": \"$QBT_USER\" },
-      { \"name\": \"password\", \"value\": \"$QBT_PASS\" },
-      { \"name\": \"category\", \"value\": \"sonarr\" },
-      { \"name\": \"priority\", \"value\": 1 }
-    ]
-  }"
+  -d "{\"enable\":true,\"name\":\"qBittorrent\",\"protocol\":\"torrent\",\"implementation\":\"qBittorrent\",\"configContract\":\"qBittorrentSettings\",\"fields\":[{\"name\":\"host\",\"value\":\"qbittorrent\"},{\"name\":\"port\",\"value\":8080},{\"name\":\"username\",\"value\":\"$QBT_USER\"},{\"name\":\"password\",\"value\":\"$QBT_PASS\"},{\"name\":\"category\",\"value\":\"sonarr\"},{\"name\":\"priority\",\"value\":1}]}"
 
 echo "📡 Configuring Radarr → qBittorrent..."
 curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $RADARR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"enable\": true,
-    \"name\": \"qBittorrent\",
-    \"protocol\": \"torrent\",
-    \"implementation\": \"qBittorrent\",
-    \"configContract\": \"qBittorrentSettings\",
-    \"fields\": [
-      { \"name\": \"host\", \"value\": \"qbittorrent\" },
-      { \"name\": \"port\", \"value\": 8080 },
-      { \"name\": \"username\", \"value\": \"$QBT_USER\" },
-      { \"name\": \"password\", \"value\": \"$QBT_PASS\" },
-      { \"name\": \"category\", \"value\": \"radarr\" },
-      { \"name\": \"priority\", \"value\": 1 }
-    ]
-  }"
+  -d "{\"enable\":true,\"name\":\"qBittorrent\",\"protocol\":\"torrent\",\"implementation\":\"qBittorrent\",\"configContract\":\"qBittorrentSettings\",\"fields\":[{\"name\":\"host\",\"value\":\"qbittorrent\"},{\"name\":\"port\",\"value\":8080},{\"name\":\"username\",\"value\":\"$QBT_USER\"},{\"name\":\"password\",\"value\":\"$QBT_PASS\"},{\"name\":\"category\",\"value\":\"radarr\"},{\"name\":\"priority\",\"value\":1}]}"
 
-# Link to Prowlarr indexer connections (unchanged)
 echo "🔗 Linking Sonarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"Sonarr\",
-    \"implementation\": \"Sonarr\",
-    \"enableRss\": true,
-    \"enableAutomaticSearch\": true,
-    \"enableInteractiveSearch\": true,
-    \"syncLevel\": 3,
-    \"configContract\": \"SonarrSettings\",
-    \"fields\": [
-      { \"name\": \"baseUrl\", \"value\": \"\" },
-      { \"name\": \"apiKey\", \"value\": "$SONARR_API_KEY" },
-      { \"name\": \"url\", \"value\": "http://sonarr:8989" }
-    ]
-  }"
+  -d "{\"name\":\"Sonarr\",\"implementation\":\"Sonarr\",\"enableRss\":true,\"enableAutomaticSearch\":true,\"enableInteractiveSearch\":true,\"syncLevel\":3,\"configContract\":\"SonarrSettings\",\"fields\":[{\"name\":\"baseUrl\",\"value\":\"\"},{\"name\":\"apiKey\",\"value\":\"$SONARR_API_KEY\"},{\"name\":\"url\",\"value\":\"http://sonarr:8989\"}]}"
 
 echo "🔗 Linking Radarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" \
   -H "Content-Type: application/json" \
-  -d "{
-    \"name\": \"Radarr\",
-    \"implementation\": \"Radarr\",
-    \"enableRss\": true,
-    \"enableAutomaticSearch\": true,
-    \"enableInteractiveSearch\": true,
-    \"syncLevel\": 3,
-    \"configContract\": \"RadarrSettings\",
-    \"fields\": [
-      { \"name\": \"baseUrl\", \"value\": \"\" },
-      { \"name\": \"apiKey\", \"value\": "$RADARR_API_KEY" },
-      { \"name\": \"url\", \"value\": "http://radarr:7878" }
-    ]
-  }"
+  -d "{\"name\":\"Radarr\",\"implementation\":\"Radarr\",\"enableRss\":true,\"enableAutomaticSearch\":true,\"enableInteractiveSearch\":true,\"syncLevel\":3,\"configContract\":\"RadarrSettings\",\"fields\":[{\"name\":\"baseUrl\",\"value\":\"\"},{\"name\":\"apiKey\",\"value\":\"$RADARR_API_KEY\"},{\"name\":\"url\",\"value\":\"http://radarr:7878\"}]}"
 
-echo "✅ Autoconfig completed successfully."
-echo "📋 If any API keys were added to .env, please restart the stack to apply changes."
+echo "✅ Autoconfig completed. Please verify the above API keys and update your .env if needed."
