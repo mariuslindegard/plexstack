@@ -29,9 +29,11 @@ services:
         mkdir -p "${MEDIA_MOUNT}"
         chown ${PUID}:${PGID} "${MEDIA_MOUNT}"
 
-        if [ -d "${MEDIA_MOUNT}" ] && [ "$(ls -A \"${MEDIA_MOUNT}\")" ]; then
-          echo "[rclone] Cleaning stale files in ${MEDIA_MOUNT}"
-          rm -rf "${MEDIA_MOUNT}"/*
+        if [ -d "${MEDIA_MOUNT}" ]; then
+          if find "${MEDIA_MOUNT}" -mindepth 1 | read; then
+            echo "[rclone] Cleaning stale files in ${MEDIA_MOUNT}"
+            rm -rf "${MEDIA_MOUNT}"/*
+          fi
         fi
 
         printf 'user_allow_other\n' > /etc/fuse.conf
@@ -62,7 +64,8 @@ services:
     network_mode: bridge
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
@@ -145,7 +148,8 @@ services:
     container_name: qbittorrent
     restart: unless-stopped
     depends_on:
-      - rclone
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
