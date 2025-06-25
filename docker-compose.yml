@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   proxy-manager:
     image: jc21/nginx-proxy-manager:latest
@@ -15,7 +13,7 @@ services:
       - ./npm/letsencrypt:/etc/letsencrypt
     networks:
       - web
-      - internal
+      - internalx
 
   portainer:
     image: portainer/portainer-ce:latest
