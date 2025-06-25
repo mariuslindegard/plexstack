@@ -3,16 +3,6 @@ set -e
 
 source /.env
 
-# Check for required API keys
-if [ -z "$SONARR_API_KEY" ] || [ -z "$RADARR_API_KEY" ] || [ -z "$PROWLARR_API_KEY" ]; then
-  echo "❌ Missing one or more required API keys:"
-  echo "SONARR_API_KEY=$SONARR_API_KEY"
-  echo "RADARR_API_KEY=$RADARR_API_KEY"
-  echo "PROWLARR_API_KEY=$PROWLARR_API_KEY"
-  echo "Please set these values in your .env file and restart the autoconfig container."
-  exit 1
-fi
-
 wait_for() {
   local url=$1
   local name=$2
@@ -33,8 +23,29 @@ wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBT_URL" "qBittorrent"
 
+# Helper: fetch and display API keys if not present in .env
+if [ -z "$SONARR_API_KEY" ]; then
+  SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
+  echo "🔑 SONARR_API_KEY (not set in .env): $SONARR_API_KEY"
+fi
+
+if [ -z "$RADARR_API_KEY" ]; then
+  RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
+  echo "🔑 RADARR_API_KEY (not set in .env): $RADARR_API_KEY"
+fi
+
+if [ -z "$PROWLARR_API_KEY" ]; then
+  PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
+  echo "🔑 PROWLARR_API_KEY (not set in .env): $PROWLARR_API_KEY"
+fi
+
+if [ -z "$SONARR_API_KEY" ] || [ -z "$RADARR_API_KEY" ] || [ -z "$PROWLARR_API_KEY" ]; then
+  echo "❌ Please copy these API keys into your .env file and rerun the autoconfig container."
+  exit 1
+fi
+
 echo "📡 Configuring Sonarr → qBittorrent..."
-curl -v -X POST "$SONARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json"   -d '{
+curl -s -X POST "$SONARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json"   -d '{
     "enable": true,
     "name": "qBittorrent",
     "protocol": "torrent",
@@ -52,7 +63,7 @@ curl -v -X POST "$SONARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $SONARR_API
   }'
 
 echo "📡 Configuring Radarr → qBittorrent..."
-curl -v -X POST "$RADARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json"   -d '{
+curl -s -X POST "$RADARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $RADARR_API_KEY" -H "Content-Type: application/json"   -d '{
     "enable": true,
     "name": "qBittorrent",
     "protocol": "torrent",
@@ -68,7 +79,7 @@ curl -v -X POST "$RADARR_URL/api/v3/downloadclient"   -H "X-Api-Key: $RADARR_API
   }'
 
 echo "🔗 Linking Sonarr to Prowlarr..."
-curl -v -X POST "$PROWLARR_URL/api/v1/applications"   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json"   -d '{
+curl -s -X POST "$PROWLARR_URL/api/v1/applications"   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json"   -d '{
     "name": "Sonarr",
     "implementation": "Sonarr",
     "enableRss": true,
@@ -84,7 +95,7 @@ curl -v -X POST "$PROWLARR_URL/api/v1/applications"   -H "X-Api-Key: $PROWLARR_A
   }'
 
 echo "🔗 Linking Radarr to Prowlarr..."
-curl -v -X POST "$PROWLARR_URL/api/v1/applications"   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json"   -d '{
+curl -s -X POST "$PROWLARR_URL/api/v1/applications"   -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json"   -d '{
     "name": "Radarr",
     "implementation": "Radarr",
     "enableRss": true,
