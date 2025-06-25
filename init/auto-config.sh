@@ -10,9 +10,10 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
+# Load environment variables including QBT_USER and QBT_PASS
 source "$ENV_FILE"
 
-# Wait until services are reachable
+# Helper: wait until a service is reachable
 wait_for() {
   local url=$1
   local name=$2
@@ -23,15 +24,19 @@ wait_for() {
   echo "✅ $name is up!"
 }
 
+# Service URLs
 SONARR_URL="http://sonarr:8989"
 RADARR_URL="http://radarr:7878"
 PROWLARR_URL="http://prowlarr:9696"
+QBITTORRENT_URL="http://qbittorrent:8080"
 
+# Wait for all services
 wait_for "$SONARR_URL" "Sonarr"
 wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
+wait_for "$QBITTORRENT_URL" "qBittorrent"
 
-# Fetch and write API keys if needed
+# Fetch and write API keys if missing
 update_env_if_missing() {
   local key=$1
   local value=$2
@@ -41,25 +46,32 @@ update_env_if_missing() {
   fi
 }
 
+# Sonarr API key
 if [ -z "$SONARR_API_KEY" ]; then
   SONARR_API_KEY=$(curl -s "$SONARR_URL/api/v3/system/status" | jq -r '.apiKey')
   echo "🔑 SONARR_API_KEY=$SONARR_API_KEY"
   update_env_if_missing "SONARR_API_KEY" "$SONARR_API_KEY"
 fi
 
+# Radarr API key
 if [ -z "$RADARR_API_KEY" ]; then
   RADARR_API_KEY=$(curl -s "$RADARR_URL/api/v3/system/status" | jq -r '.apiKey')
   echo "🔑 RADARR_API_KEY=$RADARR_API_KEY"
   update_env_if_missing "RADARR_API_KEY" "$RADARR_API_KEY"
 fi
 
+# Prowlarr API key
 if [ -z "$PROWLARR_API_KEY" ]; then
   PROWLARR_API_KEY=$(curl -s "$PROWLARR_URL/api/v1/system/status" | jq -r '.apiKey')
   echo "🔑 PROWLARR_API_KEY=$PROWLARR_API_KEY"
   update_env_if_missing "PROWLARR_API_KEY" "$PROWLARR_API_KEY"
 fi
 
-# Link Sonarr/Radarr to qBittorrent (assumes user has set credentials manually)
+# Default qBittorrent credentials
+QBT_USER=${QBT_USER:-admin}
+QBT_PASS=${QBT_PASS:-adminadmin}
+
+# Link Sonarr to qBittorrent
 echo "📡 Configuring Sonarr → qBittorrent..."
 curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
   -H "X-Api-Key: $SONARR_API_KEY" \
@@ -73,15 +85,34 @@ curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
     \"fields\": [
       { \"name\": \"host\", \"value\": \"qbittorrent\" },
       { \"name\": \"port\", \"value\": 8080 },
-      { \"name\": \"username\", \"value\": \"${QBT_USER:-admin}\" },
-      { \"name\": \"password\", \"value\": \"${QBT_PASS:-adminadmin}\" },
+      { \"name\": \"username\", \"value\": \"$QBT_USER\" },
+      { \"name\": \"password\", \"value\": \"$QBT_PASS\" },
       { \"name\": \"category\", \"value\": \"sonarr\" },
       { \"name\": \"priority\", \"value\": 1 }
     ]
   }"
 
+echo "📡 Configuring Radarr → qBittorrent..."
+curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
+  -H "X-Api-Key: $RADARR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"enable\": true,
+    \"name\": \"qBittorrent\",
+    \"protocol\": \"torrent\",
+    \"implementation\": \"qBittorrent\",
+    \"configContract\": \"qBittorrentSettings\",
+    \"fields\": [
+      { \"name\": \"host\", \"value\": \"qbittorrent\" },
+      { \"name\": \"port\", \"value\": 8080 },
+      { \"name\": \"username\", \"value\": \"$QBT_USER\" },
+      { \"name\": \"password\", \"value\": \"$QBT_PASS\" },
+      { \"name\": \"category\", \"value\": \"radarr\" },
+      { \"name\": \"priority\", \"value\": 1 }
+    ]
+  }"
 
-# Link to Prowlarr
+# Link to Prowlarr indexer connections (unchanged)
 echo "🔗 Linking Sonarr to Prowlarr..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" \
@@ -96,8 +127,8 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     \"configContract\": \"SonarrSettings\",
     \"fields\": [
       { \"name\": \"baseUrl\", \"value\": \"\" },
-      { \"name\": \"apiKey\", \"value\": \"$SONARR_API_KEY\" },
-      { \"name\": \"url\", \"value\": \"http://sonarr:8989\" }
+      { \"name\": \"apiKey\", \"value\": "$SONARR_API_KEY" },
+      { \"name\": \"url\", \"value\": "http://sonarr:8989" }
     ]
   }"
 
@@ -115,8 +146,8 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     \"configContract\": \"RadarrSettings\",
     \"fields\": [
       { \"name\": \"baseUrl\", \"value\": \"\" },
-      { \"name\": \"apiKey\", \"value\": \"$RADARR_API_KEY\" },
-      { \"name\": \"url\", \"value\": \"http://radarr:7878\" }
+      { \"name\": \"apiKey\", \"value\": "$RADARR_API_KEY" },
+      { \"name\": \"url\", \"value\": "http://radarr:7878" }
     ]
   }"
 
