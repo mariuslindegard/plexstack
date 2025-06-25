@@ -1,168 +1,170 @@
 services:
-  # qBittorrent
+  proxy-manager:
+    image: jc21/nginx-proxy-manager:latest
+    container_name: proxy-manager
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "81:81"
+    env_file: ./.env
+    volumes:
+      - ./npm/data:/data
+      - ./npm/letsencrypt:/etc/letsencrypt
+    networks:
+      - web
+      - internal
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    command: -H unix:///var/run/docker.sock
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./portainer/data:/data
+    ports:
+      - "9000:9000"
+    networks:
+      - web
+
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
-    env_file:
-      - .env
-    environment:
-      - WEBUI_PORT=8080
-    volumes:
-      - ./config/qbittorrent:/config
-      - ./downloads:/downloads
-      - ./media:/media
-    ports:
-      - "8080:8080"
-      - "6881:6881"
-      - "6881:6881/udp"
     restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - WEBUI_PORT=8080
+      - TZ=Europe/Oslo
+      - QBT_USERNAME=${QBT_USER}
+      - QBT_PASSWORD=${QBT_PASS}
+    volumes:
+      - ./downloads:/downloads
+      - ./config/qbittorrent:/config
     networks:
-      - plexstack
+      - internal
 
-  # Sonarr
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
-    env_file:
-      - .env
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=Europe/Oslo
+      - SONARR_API_KEY=${SONARR_API_KEY}
     volumes:
       - ./config/sonarr:/config
       - ./downloads:/downloads
       - ./media/tv:/tv
-    ports:
-      - "8989:8989"
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
     networks:
-      - plexstack
+      - internal
 
-  # Radarr
   radarr:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
-    env_file:
-      - .env
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=Europe/Oslo
+      - RADARR_API_KEY=${RADARR_API_KEY}
     volumes:
       - ./config/radarr:/config
       - ./downloads:/downloads
       - ./media/movies:/movies
-    ports:
-      - "7878:7878"
-    restart: unless-stopped
-    depends_on:
-      - qbittorrent
     networks:
-      - plexstack
+      - internal
 
-  # Prowlarr
   prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
+    image: lscr.io/linuxserver/prowlarr:develop
     container_name: prowlarr
-    env_file:
-      - .env
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=Europe/Oslo
+      - PROWLARR_API_KEY=${PROWLARR_API_KEY}
     volumes:
       - ./config/prowlarr:/config
-    ports:
-      - "9696:9696"
-    restart: unless-stopped
-    depends_on:
-      - sonarr
-      - radarr
     networks:
-      - plexstack
+      - internal
 
-  # Plex Media Server
-  plex:
-    image: plexinc/pms-docker:plexpass
-    container_name: plex
-    env_file:
-      - .env
-    environment:
-      - PLEX_CLAIM=${PLEX_CLAIM}
-    volumes:
-      - ./config/plex:/config
-      - ./media:/media
-      - transcode:/transcode
-    ports:
-      - "32400:32400"
-    restart: unless-stopped
-    networks:
-      - plexstack
-
-  # Rclone mount (for cloud media)
   rclone:
     image: rclone/rclone:latest
     container_name: rclone
-    env_file:
-      - .env
-    command: mount ${RCLONE_REMOTE} ${RCLONE_MOUNT_PATH} --config /config/rclone/rclone.conf --allow-other --daemon
+    restart: unless-stopped
+    env_file: ./.env
+    command: >
+      sh -c "rclone mount ${RCLONE_REMOTE} ${RCLONE_MOUNT_PATH}
+      --rc --allow-other --buffer-size 256M --dir-cache-time 72h
+      --vfs-cache-mode writes --vfs-cache-max-age 5m
+      --vfs-read-chunk-size 128M"
     cap_add:
       - SYS_ADMIN
     devices:
       - /dev/fuse
-    security_opt:
-      - apparmor:unconfined
     volumes:
       - ./config/rclone:/config/rclone
-      - ./media/gdrive:/media/gdrive
-    restart: unless-stopped
     networks:
-      - plexstack
+      - internal
 
-  # Nginx Proxy Manager
-  nginx-proxy-manager:
-    image: jc21/nginx-proxy-manager:latest
-    container_name: nginx-proxy-manager
-    env_file:
-      - .env
+  plex:
+    image: lscr.io/linuxserver/plex:latest
+    container_name: plex
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=Europe/Oslo
+      - PLEX_CLAIM=${PLEX_CLAIM}
     volumes:
-      - ./config/nginx-proxy-manager/data:/data
-      - ./config/nginx-proxy-manager/letsencrypt:/etc/letsencrypt
-    ports:
-      - "80:80"
-      - "81:81"
-      - "443:443"
-    restart: unless-stopped
+      - ./config/plex:/config
+      - ./media/tv:/tv
+      - ./media/movies:/movies
+      - ${RCLONE_MOUNT_PATH}:/clouddrive
     networks:
-      - plexstack
+      - internal
 
-  # Portainer (Docker GUI)
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    command: -H unix:///var/run/docker.sock
+  plexmeta:
+    image: meisnate12/plex-meta-manager:latest
+    container_name: plexmeta
+    restart: unless-stopped
+    env_file: ./.env
+    environment:
+      - PLEX_TOKEN=${PLEX_CLAIM}
+      - TZ=Europe/Oslo
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ./config/portainer:/data
-    ports:
-      - "9000:9000"
-    restart: unless-stopped
+      - ./config/plexmeta:/config
+      - ./media:/media
     networks:
-      - plexstack
+      - internal
 
-  # Auto-config script (links all the above via their APIs)
   autoconfig:
     image: alpine:latest
-    container_name: auto-config
-    env_file:
-      - .env
-    volumes:
-      - ./scripts/auto-config.sh:/init/auto-config.sh:ro
-    entrypoint: ["/bin/sh", "/init/auto-config.sh"]
+    container_name: autoconfig
     depends_on:
       - sonarr
       - radarr
-      - prowlarr
       - qbittorrent
+      - prowlarr
+    volumes:
+      - ./init:/init
+      - ./.env:/.env:ro
+    entrypoint: /bin/sh
+    command: -c "apk add --no-cache bash curl jq && chmod +x /init/auto-config.sh && /init/auto-config.sh"
     networks:
-      - plexstack
+      - internal
+    restart: "no"
 
-# Transcode directory for Plex
-volumes:
-  transcode:
-
-# Shared network for all services
 networks:
-  plexstack:
+  web:
+    external: false
+  internal:
     driver: bridge
