@@ -3,11 +3,26 @@ set -e
 
 source /.env
 
+# Ensure qBittorrent config folder exists and is owned correctly
+echo "📁 Ensuring qBittorrent config directory is ready..."
+
+mkdir -p /config/qbittorrent
+chown -R "$PUID:$PGID" /config/qbittorrent
+
+# Wait until config file is created by qBittorrent
+until [ -f /config/qbittorrent/qBittorrent/qBittorrent.conf ]; do
+  echo "⏳ Waiting for qBittorrent config to be created..."
+  sleep 2
+done
+
+echo "✅ qBittorrent config file found."
+
 SONARR_URL="http://sonarr:8989"
 RADARR_URL="http://radarr:7878"
 PROWLARR_URL="http://prowlarr:9696"
 QBT_URL="http://qbittorrent:8080"
 QBIT_CONFIG="/config/qbittorrent/qBittorrent/qBittorrent.conf"
+
 
 wait_for() {
   local url=$1
