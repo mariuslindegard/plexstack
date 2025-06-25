@@ -11,19 +11,12 @@ if [ ! -f "$ENV_FILE" ]; then
 fi
 source "$ENV_FILE"
 
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                         Configuration                                      │
-# └────────────────────────────────────────────────────────────────────────────┘
+# Default media dirs inside the containers (override in .env if needed)
 TV_DIR=${TV_DIR:-/media/tv}
 MOVIES_DIR=${MOVIES_DIR:-/media/movies}
 
-SONARR_URL="http://sonarr:8989"
-RADARR_URL="http://radarr:7878"
-PROWLARR_URL="http://prowlarr:9696"
-QBT_URL="http://qbittorrent:8080"
-
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                         Helper: wait_for                                   │
+# │                         Helper: wait_for                                    │
 # └────────────────────────────────────────────────────────────────────────────┘
 wait_for() {
   local url=$1; local name=$2
@@ -33,12 +26,21 @@ wait_for() {
 }
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                        Wait for all services                               │
+# │                            Service URLs                                     │
+# └────────────────────────────────────────────────────────────────────────────┘
+SONARR_URL="http://sonarr:8989"
+RADARR_URL="http://radarr:7878"
+PROWLARR_URL="http://prowlarr:9696"
+QBT_URL="http://qbittorrent:8080"
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                        Wait for all services                                │
 # └────────────────────────────────────────────────────────────────────────────┘
 wait_for "$SONARR_URL"   "Sonarr"
 wait_for "$RADARR_URL"   "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
 wait_for "$QBT_URL"      "qBittorrent"
+
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
 # │                      Sonarr → qBittorrent                                  │
@@ -77,6 +79,7 @@ existing_radarr=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" "$RADARR_URL/api/v3/do
 if echo "$existing_radarr" | jq -e '.[] | select(.implementation=="QBitTorrent")' >/dev/null; then
   echo "✅ Radarr already has qBittorrent client"
 else
+  # Attempt to add Radarr's qBittorrent client and capture response for debugging
   resp=$(curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     -H "X-Api-Key: $RADARR_API_KEY" \
     -H "Content-Type: application/json" \
@@ -104,7 +107,7 @@ else
 fi
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                         Root folders                                       │
+# │                         Root folder setup                                   │
 # └────────────────────────────────────────────────────────────────────────────┘
 echo "📁 Ensuring Sonarr root folder at $TV_DIR..."
 curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
@@ -123,9 +126,14 @@ curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
   || echo "⚠️ Radarr already has root folder $MOVIES_DIR"
 
 # ┌────────────────────────────────────────────────────────────────────────────┐
-# │                      Prowlarr ← Sonarr/Radarr                              │
+# │                  Skipping Sonarr quality profile                           │
 # └────────────────────────────────────────────────────────────────────────────┘
-echo "🔗 Linking Sonarr to Prowlarr (Apps)..."
+echo "🎞 Skipping Sonarr quality profile (known API issue)."
+
+# ┌────────────────────────────────────────────────────────────────────────────┐
+# │                      Prowlarr integrations                                 │
+# └────────────────────────────────────────────────────────────────────────────┘
+echo "🔗 Linking Sonarr to Prowlarr (Apps sync)..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" \
   -H "Content-Type: application/json" \
@@ -138,15 +146,15 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "SonarrSettings",
     "fields": [
-      {"name":"baseUrl","value":""},
+      {"name":"baseUrl","value":"http://sonarr:8989"},
       {"name":"apiKey","value":"'"$SONARR_API_KEY"'"},
-      {"name":"url","value":"'"$SONARR_URL"'"}
+      {"name":"url","value":""}
     ]
   }' \
   && echo "✅ Sonarr linked to Prowlarr" \
   || echo "🔗 Sonarr already linked to Prowlarr"
 
-echo "🔗 Linking Radarr to Prowlarr (Apps)..."
+echo "🔗 Linking Radarr to Prowlarr (Apps sync)..."
 curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
   -H "X-Api-Key: $PROWLARR_API_KEY" \
   -H "Content-Type: application/json" \
@@ -159,18 +167,16 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "syncLevel": 3,
     "configContract": "RadarrSettings",
     "fields": [
-      {"name":"baseUrl","value":""},
+      {"name":"baseUrl","value":"http://radarr:7878"},
       {"name":"apiKey","value":"'"$RADARR_API_KEY"'"},
-      {"name":"url","value":"'"$RADARR_URL"'"}
+      {"name":"url","value":"'"$RADARR_API_KEY"'"}
     ]
   }' \
   && echo "✅ Radarr linked to Prowlarr" \
   || echo "🔗 Radarr already linked to Prowlarr"
 
-# ┌────────────────────────────────────────────────────────────────────────────┐
-# │                      Prowlarr → qBittorrent                                │
-# └────────────────────────────────────────────────────────────────────────────┘
-echo "📡 Ensuring Prowlarr → qBittorrent..."
+# Add qBittorrent as a download client in Prowlarr
+echo "📡 Ensuring Prowlarr → qBittorrent download client..."
 existing_prowlarr=$(curl -s -H "X-Api-Key: $PROWLARR_API_KEY" "$PROWLARR_URL/api/v1/downloadclient")
 if echo "$existing_prowlarr" | jq -e '.[] | select(.name=="qBittorrent")' >/dev/null; then
   echo "✅ Prowlarr already has qBittorrent client"
