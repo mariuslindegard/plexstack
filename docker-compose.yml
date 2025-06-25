@@ -182,7 +182,7 @@ services:
     networks:
       - internal
 
-  autoconfig:
+    autoconfig:
     image: alpine:latest
     container_name: autoconfig
     depends_on:
@@ -191,13 +191,14 @@ services:
       - qbittorrent
       - prowlarr
     volumes:
-      - ./init:/init:ro
+      - ./init:/init
       - ./.env:/.env:ro
     entrypoint: /bin/sh
     command: -c "apk add --no-cache bash curl jq && chmod +x /init/auto-config.sh && /init/auto-config.sh"
     networks:
       - internal
     restart: "no"
+
 
 networks:
   web:
