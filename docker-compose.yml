@@ -117,7 +117,7 @@ services:
 
   # 6. qBittorrent (Downloader)
   qbittorrent:
-    image: lscr.io/linuxserver/qbittorrent:latest
+    image: lscr.io/linuxserver/qbittorrent:4.6.0-r0
     container_name: qbittorrent
     restart: unless-stopped
     depends_on:
