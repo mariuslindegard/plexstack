@@ -164,7 +164,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "enableRss": true,
     "enableAutomaticSearch": true,
     "enableInteractiveSearch": true,
-    "syncLevel": "full-sync",
+    "syncLevel": "fullSync",
     "configContract": "RadarrSettings",
     "fields": [
       {"name":"baseUrl","value":"http://radarr:7878"},
