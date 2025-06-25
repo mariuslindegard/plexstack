@@ -143,7 +143,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "enableRss": true,
     "enableAutomaticSearch": true,
     "enableInteractiveSearch": true,
-    "syncLevel": 3,
+    "syncLevel": "fullSync",
     "configContract": "SonarrSettings",
     "fields": [
       {"name":"baseUrl","value":"http://sonarr:8989"},
@@ -164,7 +164,7 @@ curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
     "enableRss": true,
     "enableAutomaticSearch": true,
     "enableInteractiveSearch": true,
-    "syncLevel": 3,
+    "syncLevel": "full-sync",
     "configContract": "RadarrSettings",
     "fields": [
       {"name":"baseUrl","value":"http://radarr:7878"},
