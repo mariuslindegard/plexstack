@@ -59,7 +59,8 @@ curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
       { "name": "port", "value": 8080 },
       { "name": "username", "value": "'"$QBT_USER"'" },
       { "name": "password", "value": "'"$QBT_PASS"'" },
-      { "name": "category", "value": "sonarr" }
+      { "name": "category", "value": "sonarr" },
+      { "name": "priority", "value": 1 }
     ]
   }'
 
@@ -75,10 +76,10 @@ curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
     "fields": [
       { "name": "host", "value": "qbittorrent" },
       { "name": "port", "value": 8080 },
-      { "name": "priority", "value": 1 },
       { "name": "username", "value": "'"$QBT_USER"'" },
       { "name": "password", "value": "'"$QBT_PASS"'" },
-      { "name": "category", "value": "radarr" }
+      { "name": "category", "value": "radarr" },
+      { "name": "priority", "value": 1 }
     ]
   }'
 
@@ -86,6 +87,7 @@ curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
 # Root folders
 # ----------------------
 echo "📁 Adding root folders..."
+
 curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
   -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
   -d '{ "path": "/tv" }'
@@ -95,60 +97,43 @@ curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
   -d '{ "path": "/movies" }'
 
 # ----------------------
-# Quality profiles (basic)
+# Skip Sonarr Quality Profile if causing errors
 # ----------------------
-echo "🎞 Adding quality profile to Sonarr..."
-curl -s -X POST "$SONARR_URL/api/v3/qualityprofile" \
-  -H "X-Api-Key: $SONARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
-    "name": "HD-1080p",
-    "upgradeAllowed": true,
-    "cutoff": 6,
-    "items": [
-      { "quality": { "id": 1, "name": "SDTV" }, "allowed": false },
-      { "quality": { "id": 6, "name": "HD-1080p" }, "allowed": true },
-      { "quality": { "id": 7, "name": "HD-720p" }, "allowed": true },
-      { "quality": { "id": 8, "name": "HDTV-720p" }, "allowed": true }
-    ]
-  }'
+echo "🎞 Skipping quality profile for Sonarr due to known API issues."
 
 # ----------------------
-# Link Sonarr/Radarr to Prowlarr
+# Link Sonarr/Radarr to Prowlarr if not already added
 # ----------------------
-echo "🔗 Linking Sonarr to Prowlarr..."
-curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
-  -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
-    "name": "Sonarr",
-    "implementation": "Sonarr",
-    "enableRss": true,
-    "enableAutomaticSearch": true,
-    "enableInteractiveSearch": true,
-    "syncLevel": 3,
-    "configContract": "SonarrSettings",
-    "fields": [
-      { "name": "baseUrl", "value": "" },
-      { "name": "apiKey", "value": "'"$SONARR_API_KEY"'" },
-      { "name": "url", "value": "http://sonarr:8989" }
-    ]
-  }'
+link_app() {
+  local appname=$1
+  local url=$2
+  local apikey=$3
+  local config=$4
 
-echo "🔗 Linking Radarr to Prowlarr..."
-curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
-  -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
-  -d '{
-    "name": "Radarr",
-    "implementation": "Radarr",
-    "enableRss": true,
-    "enableAutomaticSearch": true,
-    "enableInteractiveSearch": true,
-    "syncLevel": 3,
-    "configContract": "RadarrSettings",
-    "fields": [
-      { "name": "baseUrl", "value": "" },
-      { "name": "apiKey", "value": "'"$RADARR_API_KEY"'" },
-      { "name": "url", "value": "http://radarr:7878" }
-    ]
-  }'
+  if curl -s -H "X-Api-Key: $PROWLARR_API_KEY" "$PROWLARR_URL/api/v1/applications" | jq -e ".[] | select(.name == \"$appname\")" >/dev/null; then
+    echo "🔗 $appname already linked to Prowlarr."
+  else
+    echo "🔗 Linking $appname to Prowlarr..."
+    curl -s -X POST "$PROWLARR_URL/api/v1/applications" \
+      -H "X-Api-Key: $PROWLARR_API_KEY" -H "Content-Type: application/json" \
+      -d '{
+        "name": "'"$appname"'",
+        "implementation": "'"$appname"'",
+        "enableRss": true,
+        "enableAutomaticSearch": true,
+        "enableInteractiveSearch": true,
+        "syncLevel": 3,
+        "configContract": "'"$config"'",
+        "fields": [
+          { "name": "baseUrl", "value": "" },
+          { "name": "apiKey", "value": "'"$apikey"'" },
+          { "name": "url", "value": "'"$url"'" }
+        ]
+      }'
+  fi
+}
 
-echo "✅ All services connected and configured!"
+link_app "Sonarr" "$SONARR_URL" "$SONARR_API_KEY" "SonarrSettings"
+link_app "Radarr" "$RADARR_URL" "$RADARR_API_KEY" "RadarrSettings"
+
+echo "✅ All services connected!"
