@@ -49,4 +49,8 @@ docker compose up -d --build
 echo "✅ All services started!"
 echo ""
 echo "📌 IMPORTANT: On first run, open qBittorrent at http://localhost:8080 and manually set:"
-echo "   → Userna
+echo "   → Username: admin"
+echo "   → Password: adminadmin"
+echo ""
+echo "💡 Then restart the autoconfig container:"
+echo "   docker restart autoconfig"
