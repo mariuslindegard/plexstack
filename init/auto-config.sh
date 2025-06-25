@@ -26,12 +26,10 @@ wait_for() {
 SONARR_URL="http://sonarr:8989"
 RADARR_URL="http://radarr:7878"
 PROWLARR_URL="http://prowlarr:9696"
-QBT_URL="http://qbittorrent:8080"
 
 wait_for "$SONARR_URL" "Sonarr"
 wait_for "$RADARR_URL" "Radarr"
 wait_for "$PROWLARR_URL" "Prowlarr"
-wait_for "$QBT_URL" "qBittorrent"
 
 # Fetch and write API keys if needed
 update_env_if_missing() {
@@ -82,37 +80,6 @@ curl -s -X POST "$SONARR_URL/api/v3/downloadclient" \
     ]
   }"
 
-echo "📡 Configuring Radarr → qBittorrent..."
-curl -s -X POST "$RADARR_URL/api/v3/downloadclient" \
-  -H "X-Api-Key: $RADARR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"enable\": true,
-    \"name\": \"qBittorrent\",
-    \"protocol\": \"torrent\",
-    \"implementation\": \"qBittorrent\",
-    \"configContract\": \"qBittorrentSettings\",
-    \"fields\": [
-      { \"name\": \"host\", \"value\": \"qbittorrent\" },
-      { \"name\": \"port\", \"value\": 8080 },
-      { \"name\": \"username\", \"value\": \"${QBT_USER:-admin}\" },
-      { \"name\": \"password\", \"value\": \"${QBT_PASS:-adminadmin}\" },
-      { \"name\": \"category\", \"value\": \"radarr\" },
-      { \"name\": \"priority\", \"value\": 1 }
-    ]
-  }"
-
-# Add root folders
-echo "📁 Adding root folders..."
-curl -s -X POST "$SONARR_URL/api/v3/rootfolder" \
-  -H "X-Api-Key: $SONARR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "path": "/tv" }'
-
-curl -s -X POST "$RADARR_URL/api/v3/rootfolder" \
-  -H "X-Api-Key: $RADARR_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "path": "/movies" }'
 
 # Link to Prowlarr
 echo "🔗 Linking Sonarr to Prowlarr..."
