@@ -151,11 +151,3 @@ If you'd like to route your services through subdomains like `plex.yourdomain.co
 If you find a bug or want to contribute, feel free to open an issue or submit a PR. Your feedback is appreciated!
 
 ---
-
-## 📝 License
-
-MIT
-
-```
-
-```
