@@ -1,4 +1,4 @@
-# 📦 Deployable Plex Stack (Docker-Based)
+# 📦 Deployable Plex Stack (Docker-Based) + full setup guide!
 
 A fully automated and easily deployable Plex media server stack powered by Docker Compose. This setup includes:
 
