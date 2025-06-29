@@ -137,6 +137,7 @@ docker compose up -d
 
 - Open Prowlarr and add your favorite indexers.
 - Open Plex, add your media libraries (from `/media/movies` and `/media/tv`).
+- If you want to watch other media, or upload media outside of the sonarr/radarr -> qBittorrent flow you can do that as well by simply uploading to your google drive folder. I recommend making a seperate folder, like for example `/media/other`, and upload your own media there. Remember to add the folder to your media library in Plex if you want to do this.
 - Done! 🎉
 
 ---
