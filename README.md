@@ -32,11 +32,11 @@ sudo apt update && sudo apt upgrade
 
 ### 2. Clone the repository
 
-It’s recommended to clone into `/opt/`:
+I recommended to clone into `/opt/`:
 
 ```bash
 cd /opt
-git clone https://github.com/yourusername/plexstack.git
+git clone https://github.com/mariuslindegard/plexstack.git
 cd plexstack
 ```
 
