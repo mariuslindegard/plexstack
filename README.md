@@ -127,7 +127,8 @@ Navigate to **Settings → General**, copy each API key, and paste into your `.e
 Then restart your stack:
 
 ```bash
-docker compose restart
+docker compose down
+docker compose up -d
 ```
 
 ---
@@ -143,6 +144,7 @@ docker compose restart
 ## 🌐 Optional: Nginx Proxy Manager Setup
 
 If you'd like to route your services through subdomains like `plex.yourdomain.com`, instructions for configuring Nginx Proxy Manager will be added soon.
+If you don't care for this, then I recommend removing it from the docker compose file.
 
 ---
 
