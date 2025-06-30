@@ -187,6 +187,21 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./portainer/data:/data
 
+  jackett:
+    image: lscr.io/linuxserver/jackett:latest
+    container_name: jackett
+    restart: unless-stopped
+    ports:
+      - 9117:9117
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - AUTO_UPDATE=true
+    volumes:
+      - ./jackett/config:/config
+      - ${DOWNLOADS_DIR}:/downloads
+
   # 9. Auto-config (one-shot)
   autoconfig:
     image: alpine:latest
