@@ -197,6 +197,20 @@ services:
     ports:
       - 8191:8191
 
+  youtarr:
+    image: dialmforwifi/youtarr:latest
+    container_name: youtarr
+    restart: unless-stopped
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      # Optional: path to a Youtarr config file, or define config via env
+      # - YOUTARR_CONFIG_JSON=/config/config.json
+    volumes:
+      - ${MEDIA_MOUNT}:/media:rslave
+      - ./media/youtube:/media/youtube
+
   jackett:
     image: lscr.io/linuxserver/jackett:latest
     container_name: jackett
