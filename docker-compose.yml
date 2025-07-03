@@ -208,6 +208,7 @@ services:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
+      - DB_TYPE=sqlite
     ports:
       - "3087:3087"
     volumes:
