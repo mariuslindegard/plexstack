@@ -197,23 +197,19 @@ services:
     ports:
       - 8191:8191
 
-  youtarr:
-    image: bolferdocker/youtarr:latest
-    container_name: youtarr
+  youtube-dl:
+    image: tzahi12345/youtubedl-material:latest
+    container_name: youtube-dl
     restart: unless-stopped
-    depends_on:
-      rclone:
-        condition: service_healthy
-    environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
-      - TZ=${TZ}
-      - AUTH_DISABLED=true
     ports:
-      - "3087:8000"
+      - "8998:17442"
+    environment:
+      - TZ=${TZ}
+      - UID=${PUID}
+      - GID=${PGID}
     volumes:
-      - ./youtarr/config:/config
-      - ${MEDIA_MOUNT}/YouTube:/downloads
+      - ./youtube-dl/config:/app/appdata
+      - ${MEDIA_MOUNT}/YouTube:/app/video
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
