@@ -213,13 +213,6 @@ services:
     volumes:
       - ./youtarr/config:/config
       - ${MEDIA_MOUNT}/YouTube:/downloads
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        mkdir -p /downloads
-        chown ${PUID}:${PGID} /downloads
-        exec node dist/main.js
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
