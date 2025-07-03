@@ -198,18 +198,28 @@ services:
       - 8191:8191
 
   youtarr:
-    image: dialmforwifi/youtarr:latest
+    image: dialmaster/youtarr:latest
     container_name: youtarr
     restart: unless-stopped
+    depends_on:
+      rclone:
+        condition: service_healthy
     environment:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
-      # Optional: path to a Youtarr config file, or define config via env
-      # - YOUTARR_CONFIG_JSON=/config/config.json
+    ports:
+      - "3087:3087"
     volumes:
-      - ${MEDIA_MOUNT}:/media:rslave
-      - ./media/youtube:/media/youtube
+      - ./youtarr/config:/config
+      - ${MEDIA_MOUNT}/YouTube:/downloads
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        mkdir -p /downloads
+        chown ${PUID}:${PGID} /downloads
+        exec /app/youtarr
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
