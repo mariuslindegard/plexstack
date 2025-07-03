@@ -198,7 +198,7 @@ services:
       - 8191:8191
 
   youtarr:
-    image: dialmaster/youtarr:latest
+    image: bolferdocker/youtarr:latest
     container_name: youtarr
     restart: unless-stopped
     depends_on:
@@ -208,7 +208,6 @@ services:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
-      - DB_TYPE=sqlite
     ports:
       - "3087:3087"
     volumes:
