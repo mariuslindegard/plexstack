@@ -208,6 +208,7 @@ services:
       - PUID=${PUID}
       - PGID=${PGID}
       - TZ=${TZ}
+      - AUTH_DISABLED=true
     ports:
       - "3087:8000"
     volumes:
