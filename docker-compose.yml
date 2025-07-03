@@ -219,7 +219,7 @@ services:
       - |
         mkdir -p /downloads
         chown ${PUID}:${PGID} /downloads
-        exec /app/youtarr
+        exec node dist/main.js
 
   jackett:
     image: lscr.io/linuxserver/jackett:latest
