@@ -209,7 +209,7 @@ services:
       - PGID=${PGID}
       - TZ=${TZ}
     ports:
-      - "3087:3087"
+      - "3087:8000"
     volumes:
       - ./youtarr/config:/config
       - ${MEDIA_MOUNT}/YouTube:/downloads
