@@ -187,44 +187,55 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./portainer/data:/data
 
-  flaresolverr:
-    image: ghcr.io/flaresolverr/flaresolverr:latest
-    container_name: flaresolverr
-    restart: unless-stopped
-    environment:
-      - LOG_LEVEL=info
-      - TZ=${TZ}
+  xteve:
+    image: alturismo/xteve
+    container_name: xteve
     ports:
-      - 8191:8191
-
-  youtube-dl:
-    image: tzahi12345/youtubedl-material:latest
-    container_name: youtube-dl
-    restart: unless-stopped
-    ports:
-      - "8998:17442"
-    environment:
-      - TZ=${TZ}
-      - UID=${PUID}
-      - GID=${PGID}
+      - "34400:34400"  # xTeVe Web UI
     volumes:
-      - ./youtube-dl/config:/app/appdata
-      - ${MEDIA_MOUNT}/YouTube:/app/video
-
-  jackett:
-    image: lscr.io/linuxserver/jackett:latest
-    container_name: jackett
-    restart: unless-stopped
-    ports:
-      - 9117:9117
+      - ./xteve/config:/home/xteve/.xteve
     environment:
-      - PUID=${PUID}
-      - PGID=${PGID}
       - TZ=${TZ}
-      - AUTO_UPDATE=true
-    volumes:
-      - ./jackett/config:/config
-      - ${DOWNLOADS_DIR}:/downloads
+    restart: unless-stopped
+
+  # flaresolverr:
+  #   image: ghcr.io/flaresolverr/flaresolverr:latest
+  #   container_name: flaresolverr
+  #   restart: unless-stopped
+  #   environment:
+  #     - LOG_LEVEL=info
+  #     - TZ=${TZ}
+  #   ports:
+  #     - 8191:8191
+
+  # youtube-dl:
+  #   image: tzahi12345/youtubedl-material:latest
+  #   container_name: youtube-dl
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8998:17442"
+  #   environment:
+  #     - TZ=${TZ}
+  #     - UID=${PUID}
+  #     - GID=${PGID}
+  #   volumes:
+  #     - ./youtube-dl/config:/app/appdata
+  #     - ${MEDIA_MOUNT}/YouTube:/app/video
+
+  # jackett:
+  #   image: lscr.io/linuxserver/jackett:latest
+  #   container_name: jackett
+  #   restart: unless-stopped
+  #   ports:
+  #     - 9117:9117
+  #   environment:
+  #     - PUID=${PUID}
+  #     - PGID=${PGID}
+  #     - TZ=${TZ}
+  #     - AUTO_UPDATE=true
+  #   volumes:
+  #     - ./jackett/config:/config
+  #     - ${DOWNLOADS_DIR}:/downloads
 
   # 9. Auto-config (one-shot)
   autoconfig:
