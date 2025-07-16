@@ -42,12 +42,21 @@ services:
           --dir-cache-time 72h \
           --poll-interval 15s \
           --vfs-cache-mode full \
-          --vfs-cache-max-size 30G \
+          --vfs-cache-max-size 50G \
           --vfs-cache-max-age 24h \
+          --buffer-size 64M \
+          --vfs-read-chunk-size 128M \
+          --vfs-read-chunk-size-limit 1G \
+          --timeout 2m \
+          --contimeout 1m \
+          --expect-continue-timeout 1m \
+          --retries 10 \
+          --low-level-retries 10 \
           --uid ${PUID} \
           --gid ${PGID} \
           --dir-perms 0775 \
           --file-perms 0664
+
     healthcheck:
       test: ["CMD-SHELL", "mountpoint -q ${MEDIA_MOUNT}"]
       interval: 10s
@@ -191,7 +200,7 @@ services:
     image: alturismo/xteve
     container_name: xteve
     ports:
-      - "34400:34400"  # xTeVe Web UI
+      - "34400:34400" # xTeVe Web UI
     volumes:
       - ./xteve/config:/home/xteve/.xteve
     environment:
